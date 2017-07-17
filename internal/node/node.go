@@ -1,10 +1,13 @@
 package node
 
+import "sync"
+
 type Subscription interface {
 	Write(data interface{})
 }
 
 type Node struct {
+	sync.RWMutex
 	children      map[string]*Node
 	subscriptions map[Subscription]struct{}
 }
@@ -70,4 +73,36 @@ func (n *Node) ForEachSubscription(f func(s Subscription)) {
 	for s, _ := range n.subscriptions {
 		f(s)
 	}
+}
+
+func (n *Node) RLock() {
+	if n == nil {
+		return
+	}
+
+	n.RWMutex.RLock()
+}
+
+func (n *Node) RUnlock() {
+	if n == nil {
+		return
+	}
+
+	n.RWMutex.RUnlock()
+}
+
+func (n *Node) Lock() {
+	if n == nil {
+		return
+	}
+
+	n.RWMutex.Lock()
+}
+
+func (n *Node) Unlock() {
+	if n == nil {
+		return
+	}
+
+	n.RWMutex.Unlock()
 }

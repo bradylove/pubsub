@@ -37,7 +37,7 @@ func TestNode(t *testing.T) {
 		Expect(t, n == nil).To(BeTrue())
 	})
 
-	o.Spec("returns nil for unknown child", func(t TN) {
+	o.Spec("returns child", func(t TN) {
 		n1 := t.n.AddChild("a")
 		n2 := t.n.FetchChild("a")
 		Expect(t, n1).To(Equal(n2))

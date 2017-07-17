@@ -1,16 +1,13 @@
 package pubsub
 
 import (
-	"sync"
-
 	"github.com/apoydence/pubsub/internal/node"
 )
 
 type PubSub struct {
-	mu sync.RWMutex
-	e  SubscriptionEnroller
-	a  DataAssigner
-	n  *node.Node
+	e SubscriptionEnroller
+	a DataAssigner
+	n *node.Node
 }
 
 type SubscriptionEnroller interface {
@@ -36,14 +33,12 @@ type Subscription interface {
 type Unsubscriber func()
 
 func (s *PubSub) Subscribe(subscription Subscription) Unsubscriber {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.n.Lock()
 	return s.traverseSubscribe(subscription, s.n, nil)
 }
 
 func (s *PubSub) Publish(d interface{}) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.n.RLock()
 	s.traversePublish(d, s.n, nil)
 }
 
@@ -54,8 +49,16 @@ func (s *PubSub) traversePublish(d interface{}, n *node.Node, l []string) {
 
 	children := s.a.Assign(d, l)
 
+	var childNodes []*node.Node
 	for _, child := range children {
-		s.traversePublish(d, n.FetchChild(child), append(l, child))
+		c := n.FetchChild(child)
+		childNodes = append(childNodes, c)
+		c.RLock()
+	}
+
+	n.RUnlock()
+	for i, child := range children {
+		s.traversePublish(d, childNodes[i], append(l, child))
 	}
 }
 
@@ -63,16 +66,25 @@ func (s *PubSub) traverseSubscribe(ss Subscription, n *node.Node, l []string) Un
 	child, ok := s.e.Enroll(ss, l)
 	if !ok {
 		n.AddSubscription(ss)
+		n.Unlock()
+
 		return func() {
-			s.mu.Lock()
-			defer s.mu.Unlock()
 			current := s.n
+			current.Lock()
+
 			for _, ll := range l {
+				prev := current
 				current = current.FetchChild(ll)
+				current.Lock()
+				prev.Unlock()
 			}
 			current.DeleteSubscription(ss)
+			current.Unlock()
 		}
 	}
 
-	return s.traverseSubscribe(ss, n.AddChild(child), append(l, child))
+	c := n.AddChild(child)
+	c.Lock()
+	n.Unlock()
+	return s.traverseSubscribe(ss, c, append(l, child))
 }
